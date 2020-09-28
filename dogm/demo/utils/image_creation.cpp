@@ -207,7 +207,7 @@ void computeAndSaveResultImages(const dogm::DOGM& grid_map,
                                 const std::vector<Point<dogm::GridCell>>& cells_with_velocity, const int step,
                                 const bool concatenate_images, const bool show_during_execution)
 {
-    // TODO write timing test!
+    // TODO write timing test to measure parallel advantage. Small compared to file writing?
     struct MyStruct
     {
         MyStruct(cv::Mat _img, std::string _filename) : img{std::move(img)}, filename{std::move(_filename)} {}
@@ -237,7 +237,7 @@ void computeAndSaveResultImages(const dogm::DOGM& grid_map,
     }
     else
     {
-        for_each(images.begin(), images.end(),
+        std::for_each(images.begin(), images.end(),
                  [](const auto& image) { cv::imwrite(cv::format(image.second.filename, step + 1), image.second.img); });
         image_to_show = images["Grid"].img;
     }
