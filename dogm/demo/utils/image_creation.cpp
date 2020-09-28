@@ -13,7 +13,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <future>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 static float pignistic_transformation(float free_mass, float occ_mass)
@@ -205,28 +207,39 @@ void computeAndSaveResultImages(const dogm::DOGM& grid_map,
                                 const std::vector<Point<dogm::GridCell>>& cells_with_velocity, const int step,
                                 const bool concatenate_images, const bool show_during_execution)
 {
-    cv::Mat raw_meas_grid_img = compute_raw_measurement_grid_image(grid_map);
-    cv::Mat particle_img = compute_particles_image(grid_map);
-    cv::Mat dogm_img = compute_dogm_image(grid_map, cells_with_velocity);
+    // TODO write timing test!
+    struct MyStruct
+    {
+        MyStruct(cv::Mat _img, std::string _filename) : img{std::move(img)}, filename{std::move(_filename)} {}
+        cv::Mat img{};
+        std::string filename{};
+    };
+
+    auto fut_raw_meas_grid_img = std::async(compute_raw_measurement_grid_image, grid_map);
+    auto fut_particle_img = std::async(compute_particles_image, grid_map);
+    auto fut_dogm_img = std::async(compute_dogm_image, grid_map, cells_with_velocity);
+
+    std::unordered_map<std::string, MyStruct> images{};
+    images.reserve(3U);
+    images.emplace(std::make_pair("Measurement", MyStruct{fut_raw_meas_grid_img.get(), "raw_grid_step_%d.png"}));
+    images.emplace(std::make_pair("Particles", MyStruct{fut_particle_img.get(), "particles_step_%d.png"}));
+    images.emplace(std::make_pair("Grid", MyStruct{fut_dogm_img.get(), "dogm_step_%d.png"}));
 
     cv::Mat image_to_show{};
     if (concatenate_images)
     {
-        addSubtitle("Grid", dogm_img);
-        addSubtitle("Particles", particle_img);
-        addSubtitle("Measurement", raw_meas_grid_img);
+        std::for_each(images.begin(), images.end(), [](auto& image) { addSubtitle(image.first, image.second.img); });
 
-        cv::hconcat(dogm_img, particle_img, image_to_show);
-        cv::hconcat(image_to_show, raw_meas_grid_img, image_to_show);
+        cv::hconcat(images["Grid"].img, images["Particles"].img, image_to_show);
+        cv::hconcat(image_to_show, images["Measurement"].img, image_to_show);
 
         cv::imwrite(cv::format("outputs_step_%d.png", step + 1), image_to_show);
     }
     else
     {
-        cv::imwrite(cv::format("raw_grid_step_%d.png", step + 1), raw_meas_grid_img);
-        cv::imwrite(cv::format("particles_step_%d.png", step + 1), particle_img);
-        cv::imwrite(cv::format("dogm_step_%d.png", step + 1), dogm_img);
-        image_to_show = dogm_img;
+        for_each(images.begin(), images.end(),
+                 [](const auto& image) { cv::imwrite(cv::format(image.second.filename, step + 1), image.second.img); });
+        image_to_show = images["Grid"].img;
     }
 
     if (show_during_execution)
