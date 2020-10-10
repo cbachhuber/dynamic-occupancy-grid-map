@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <image_creation.h>
+
 TEST(ImageCreation, TimeResultImagesComputationAndSaving){
     EXPECT_TRUE(true);
 }
